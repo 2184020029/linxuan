@@ -1,0 +1,2931 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>五子棋 AI 教练 · 13×13</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #080b10;
+  --bg-2: #0d121a;
+  --panel: rgba(20, 26, 37, 0.86);
+  --panel-solid: #141a25;
+  --line: rgba(151, 169, 198, 0.18);
+  --line-strong: rgba(169, 188, 216, 0.3);
+  --text: #e8edf6;
+  --muted: #8e9bb0;
+  --faint: #657188;
+  --gold: #f6c453;
+  --gold-soft: rgba(246, 196, 83, 0.13);
+  --red: #ff5e6c;
+  --cyan: #69d5ff;
+  --green: #65d6a5;
+  --shadow: 0 26px 70px rgba(0, 0, 0, 0.48);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 28px clamp(14px, 3vw, 42px) 24px;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 18% 8%, rgba(74, 108, 177, 0.2), transparent 30rem),
+    radial-gradient(circle at 82% 90%, rgba(150, 92, 38, 0.12), transparent 32rem),
+    linear-gradient(145deg, #070a0f 0%, #0b1018 52%, #090c12 100%);
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.26;
+  background-image:
+    linear-gradient(rgba(140, 163, 200, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140, 163, 200, 0.045) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: radial-gradient(circle at 50% 30%, #000 0%, transparent 72%);
+}
+
+button {
+  font: inherit;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.app {
+  position: relative;
+  width: min(1220px, 100%);
+  margin: 0 auto;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brand-mark {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border: 1px solid rgba(246, 196, 83, 0.36);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.2), transparent 42%),
+    linear-gradient(145deg, #222d3f, #0d121a);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.brand-mark::before,
+.brand-mark::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+}
+
+.brand-mark::before {
+  width: 16px;
+  height: 16px;
+  left: 9px;
+  top: 15px;
+  background: radial-gradient(circle at 35% 28%, #555, #050505 72%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.brand-mark::after {
+  width: 16px;
+  height: 16px;
+  right: 8px;
+  top: 15px;
+  background: radial-gradient(circle at 35% 25%, #fff, #c8cbd2 74%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 30px);
+  letter-spacing: -0.02em;
+  line-height: 1.16;
+}
+
+.brand-sub {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: #b9c4d6;
+  background: rgba(20, 26, 37, 0.72);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.badge.gold {
+  color: var(--gold);
+  border-color: rgba(246, 196, 83, 0.3);
+  background: rgba(246, 196, 83, 0.08);
+}
+
+.badge.degraded {
+  color: #ffc57d;
+  border-color: rgba(255, 173, 80, 0.34);
+  background: rgba(255, 162, 60, 0.09);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 356px;
+  gap: 24px;
+  align-items: start;
+}
+
+.board-column {
+  min-width: 0;
+}
+
+.board-frame {
+  position: relative;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: linear-gradient(155deg, rgba(31, 40, 55, 0.94), rgba(12, 16, 23, 0.98));
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.board-frame::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.035);
+  border-radius: 21px;
+  pointer-events: none;
+}
+
+#boardCanvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 17px;
+  background: #131923;
+  cursor: crosshair;
+  touch-action: manipulation;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.045);
+}
+
+.calc-badge {
+  position: absolute;
+  top: 25px;
+  right: 25px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border: 1px solid rgba(105, 213, 255, 0.3);
+  border-radius: 999px;
+  color: #c7efff;
+  background: rgba(9, 18, 28, 0.82);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.34);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(105, 213, 255, 0.25);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.under-board {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 4px 0;
+  font-size: 12.5px;
+}
+
+.turn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #eaf0fa;
+  font-weight: 650;
+}
+
+.turn-chip::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #0b0c0e;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.turn-chip.white::before {
+  background: #e8edf3;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.22);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.dot-sep {
+  color: #3b4658;
+}
+
+.sidebar {
+  display: grid;
+  gap: 10px;
+}
+
+.card {
+  position: relative;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  background: linear-gradient(155deg, rgba(23, 30, 43, 0.92), rgba(15, 20, 29, 0.9));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.status-card {
+  border-color: rgba(105, 213, 255, 0.18);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(72, 147, 198, 0.14), transparent 12rem),
+    linear-gradient(155deg, rgba(23, 31, 45, 0.96), rgba(14, 19, 28, 0.94));
+}
+
+.card-kicker {
+  margin-bottom: 10px;
+  color: #6c7a91;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.status-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 44px;
+  color: #f1f5fb;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.48;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(101, 214, 165, 0.1);
+}
+
+.status-dot.busy {
+  background: var(--cyan);
+  box-shadow: 0 0 0 4px rgba(105, 213, 255, 0.1);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% { opacity: 0.4; transform: scale(0.78); }
+}
+
+.loss-line:empty {
+  display: none;
+}
+
+.loss-line {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-left: 2px solid rgba(246, 196, 83, 0.65);
+  border-radius: 0 9px 9px 0;
+  color: #f3d792;
+  background: rgba(246, 196, 83, 0.065);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.meta-line {
+  margin-top: 10px;
+  color: var(--faint);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+  word-break: break-word;
+}
+
+.control-label {
+  margin-bottom: 10px;
+  color: #a9b6c9;
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+.btn-row {
+  display: grid;
+  gap: 8px;
+}
+
+.btn-row.two {
+  grid-template-columns: 1fr 1fr;
+}
+
+.btn-row.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.btn {
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: #c7d2e3;
+  background: rgba(11, 16, 24, 0.7);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.btn:hover {
+  border-color: rgba(169, 188, 216, 0.42);
+  background: rgba(35, 45, 62, 0.72);
+  color: #f3f7fd;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.btn.active {
+  color: #ffe8a8;
+  border-color: rgba(246, 196, 83, 0.46);
+  background: linear-gradient(155deg, rgba(246, 196, 83, 0.17), rgba(246, 196, 83, 0.07));
+  box-shadow: inset 0 0 0 1px rgba(246, 196, 83, 0.08);
+}
+
+.btn.danger:hover {
+  color: #ffd5d9;
+  border-color: rgba(255, 94, 108, 0.4);
+  background: rgba(255, 94, 108, 0.08);
+}
+
+.btn small {
+  display: block;
+  margin-top: 3px;
+  color: #64738a;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.btn.active small {
+  color: rgba(255, 232, 168, 0.58);
+}
+
+.auto-toggle {
+  width: 100%;
+  margin-top: 8px;
+  text-align: left;
+}
+
+.auto-toggle small {
+  margin-top: 2px;
+}
+
+.score-chart-card {
+  padding-bottom: 14px;
+}
+
+.loss-chart-card .control-label {
+  margin-bottom: 4px;
+}
+
+#scoreChart {
+  display: block;
+  width: 100%;
+  height: 56px;
+  overflow: visible;
+}
+
+.score-chart-hint {
+  margin-top: 3px;
+  color: var(--faint);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.legend-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #a4b1c4;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.legend-swatch {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  background: rgba(47, 72, 114, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(125, 160, 207, 0.24);
+}
+
+.legend-swatch.win {
+  background: rgba(255, 70, 86, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(255, 100, 110, 0.44);
+}
+
+.legend-swatch.recommend::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1.5px dashed var(--gold);
+  border-radius: 50%;
+}
+
+.legend-swatch.last::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ff4f5e;
+}
+
+.legend-gradient {
+  width: 34px;
+  height: 10px;
+  flex: 0 0 34px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3d7dff, #a25cff 52%, #ff5da2);
+  opacity: 0.85;
+}
+
+.hint-card {
+  color: #8492a7;
+  font-size: 11.5px;
+  line-height: 1.72;
+}
+
+.hint-card strong {
+  color: #becbdd;
+  font-weight: 650;
+}
+
+.hint-card p {
+  margin: 0;
+}
+
+.hint-card p + p {
+  margin-top: 6px;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 0 4px;
+  color: #57657b;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+@media (max-width: 940px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .status-card,
+  .hint-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    padding: 16px 12px 20px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .badges {
+    justify-content: flex-start;
+  }
+
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+  }
+
+  .sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .status-card,
+  .hint-card {
+    grid-column: auto;
+  }
+
+  .footer {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .status-dot.busy {
+    animation: none;
+  }
+}
+
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div>
+        <h1>五子棋 AI 教练</h1>
+        <p class="brand-sub">13 × 13</p>
+      </div>
+    </div>
+    <div class="badges">
+      <span class="badge gold">自由规则</span>
+      <span id="degradedBadge" class="badge degraded" hidden>降级模式</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="board-column">
+      <div class="board-frame">
+        <canvas id="boardCanvas" width="680" height="680" aria-label="13×13 五子棋棋盘"></canvas>
+        <div class="calc-badge" id="calcBadge" hidden>
+          <span class="spinner" aria-hidden="true"></span>
+          <span>AI 计算中</span>
+        </div>
+      </div>
+      <div class="under-board">
+        <span id="turnChip" class="turn-chip">轮到黑方</span>
+        <span class="dot-sep">·</span>
+        <span id="moveCount" class="muted">第 0 手</span>
+        <span class="dot-sep">·</span>
+        <span id="ruleNote" class="muted">你执黑 · 手动</span>
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <section class="card status-card">
+        <div class="status-line">
+          <span id="statusDot" class="status-dot" aria-hidden="true"></span>
+          <span id="statusText" aria-live="polite">落子后开始分析</span>
+        </div>
+        <div id="lossText" class="loss-line">首手无历史</div>
+      </section>
+
+      <section class="card score-chart-card">
+        <div class="control-label">你的落子评分</div>
+        <svg id="scoreChart" viewBox="0 0 300 56" role="img" aria-label="每手落子评分折线图"></svg>
+        <div id="scoreChartHint" class="score-chart-hint">100 = 最佳 · 仅统计你执黑</div>
+      </section>
+
+
+      <section class="card">
+        <div class="control-label">执子</div>
+        <div class="btn-row two" id="sideGroup">
+          <button type="button" class="btn active" data-side="1">执黑</button>
+          <button type="button" class="btn" data-side="-1">执白</button>
+        </div>
+        <button type="button" class="btn auto-toggle" id="autoOpponentBtn" aria-pressed="false">
+          <span id="autoOpponentLabel">自动对手：关</span>
+        </button>
+        <button type="button" class="btn auto-toggle active" id="hintsBtn" aria-pressed="true">
+          <span id="hintsLabel">提示：开</span>
+        </button>
+      </section>
+
+      <section class="card">
+        <div class="control-label">AI 思考深度</div>
+        <div class="btn-row three" id="difficultyGroup">
+          <button type="button" class="btn" data-diff="fast">浅</button>
+          <button type="button" class="btn active" data-diff="standard">标准</button>
+          <button type="button" class="btn" data-diff="deep">深</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="btn-row two">
+          <button type="button" class="btn" id="undoBtn">悔棋</button>
+          <button type="button" class="btn danger" id="restartBtn">重开</button>
+        </div>
+      </section>
+
+      <section class="card legend-card" aria-label="图例">
+        <div class="legend-row"><span class="legend-swatch win"></span><span>VCF / VCT</span></div>
+        <div class="legend-row"><span class="legend-gradient"></span><span>热力图 00–99</span></div>
+        <div class="legend-row"><span class="legend-swatch recommend"></span><span>推荐点</span></div>
+        <div class="legend-row"><span class="legend-swatch last"></span><span>最后一手</span></div>
+      </section>
+
+    </aside>
+  </main>
+
+</div>
+
+<noscript>需要启用 JavaScript 才能使用 AI 教练。</noscript>
+
+<script id="workerCode" type="javascript/worker">
+(function (root) {
+  'use strict';
+
+  // ===== 共享常量（主线程顶部保留同一份） =====
+  const SIZE = 13;
+  const CELLS = SIZE * SIZE;
+  const EMPTY = 0;
+  const BLACK = 1;
+  const WHITE = -1;
+
+  // 模式分值与搜索边界
+  const SCORE = Object.freeze({
+    FIVE: 10000000,
+    LIVE_FOUR: 500000,
+    RUSH_FOUR: 50000,
+    LIVE_THREE: 20000,
+    SLEEP_THREE: 1500,
+    LIVE_TWO: 800,
+    SLEEP_TWO: 100
+  });
+  const WIN_SCORE = SCORE.FIVE;
+  const WIN_THRESHOLD = 5000000;
+  const INF = 1000000000;
+  const TT_LIMIT = 300000;
+  const MOVE_LIMIT = 12;
+  const ROOT_LIMIT = 15;
+  const MAX_DEPTH = 8;
+  const NODE_MASK = 1023;
+  const SEARCH_ABORT = { searchAbort: true };
+  const TSS_ABORT = { tssAbort: true };
+
+  const DIRS = [
+    [1, 0],
+    [0, 1],
+    [1, 1],
+    [1, -1]
+  ];
+
+  function inBounds(x, y) {
+    return x >= 0 && x < SIZE && y >= 0 && y < SIZE;
+  }
+
+  function otherSide(side) {
+    return side === BLACK ? WHITE : BLACK;
+  }
+
+  function nowMs() {
+    return performance.now();
+  }
+
+  // ===== 线段索引表：横 / 竖 / 两条斜线 =====
+  const SEGMENTS = [];
+  const LINE_TABLES = [[], [], [], []]; // 横 / 竖 / 两斜，四条方向的线段索引表
+  const POINT_LINES = Array.from({ length: CELLS }, function () { return []; });
+
+  (function buildLineIndex() {
+    for (let d = 0; d < DIRS.length; d++) {
+      const dx = DIRS[d][0];
+      const dy = DIRS[d][1];
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          const px = x - dx;
+          const py = y - dy;
+          if (inBounds(px, py)) continue; // 只从线段起点开始走
+          const cells = [];
+          let cx = x;
+          let cy = y;
+          while (inBounds(cx, cy)) {
+            cells.push(cy * SIZE + cx);
+            cx += dx;
+            cy += dy;
+          }
+          if (cells.length >= 5) {
+            const segId = SEGMENTS.length;
+            SEGMENTS.push(cells);
+            LINE_TABLES[d].push(segId);
+            for (let pos = 0; pos < cells.length; pos++) {
+              POINT_LINES[cells[pos]].push({ seg: segId, pos: pos });
+            }
+          }
+        }
+      }
+    }
+  })();
+
+  // ===== 模式字符串表（长度 5 / 6 窗口扫描） =====
+  // 模式字符串仍按 5/6 长度定义；启动时编码为三进制窗口表，热路径不再切字符串
+  const PATTERN_SCORE_5 = new Int32Array(243);
+  const PATTERN_SCORE_6 = new Int32Array(729);
+  const SEGMENT_SCRATCH = new Int8Array(15);
+  const POINT_SCRATCH = new Int8Array(15);
+
+  function patternCode(text) {
+    let code = 0;
+    for (let i = 0; i < text.length; i++) code = code * 3 + (text.charCodeAt(i) - 48);
+    return code;
+  }
+
+  function addPattern(len, text, score) {
+    const table = len === 5 ? PATTERN_SCORE_5 : PATTERN_SCORE_6;
+    const code = patternCode(text);
+    if (score > table[code]) table[code] = score;
+  }
+
+  // 五连
+  addPattern(5, '11111', SCORE.FIVE);
+  // 活四
+  addPattern(6, '011110', SCORE.LIVE_FOUR);
+  // 冲四（含跳四）
+  addPattern(5, '11011', SCORE.RUSH_FOUR);
+  addPattern(5, '10111', SCORE.RUSH_FOUR);
+  addPattern(5, '11101', SCORE.RUSH_FOUR);
+  addPattern(6, '211110', SCORE.RUSH_FOUR);
+  addPattern(6, '011112', SCORE.RUSH_FOUR);
+  addPattern(6, '110110', SCORE.RUSH_FOUR);
+  addPattern(6, '011011', SCORE.RUSH_FOUR);
+  // 活三
+  addPattern(5, '01110', SCORE.LIVE_THREE);
+  addPattern(6, '011100', SCORE.LIVE_THREE);
+  addPattern(6, '001110', SCORE.LIVE_THREE);
+  addPattern(6, '010110', SCORE.LIVE_THREE);
+  addPattern(6, '011010', SCORE.LIVE_THREE);
+  // 眠三
+  addPattern(6, '211100', SCORE.SLEEP_THREE);
+  addPattern(6, '001112', SCORE.SLEEP_THREE);
+  addPattern(6, '210110', SCORE.SLEEP_THREE);
+  addPattern(6, '011012', SCORE.SLEEP_THREE);
+  addPattern(6, '211010', SCORE.SLEEP_THREE);
+  addPattern(6, '010112', SCORE.SLEEP_THREE);
+  // 活二
+  addPattern(5, '00110', SCORE.LIVE_TWO);
+  addPattern(5, '01100', SCORE.LIVE_TWO);
+  addPattern(5, '01010', SCORE.LIVE_TWO);
+  addPattern(6, '001100', SCORE.LIVE_TWO);
+  addPattern(6, '011000', SCORE.LIVE_TWO);
+  addPattern(6, '000110', SCORE.LIVE_TWO);
+  addPattern(6, '010100', SCORE.LIVE_TWO);
+  addPattern(6, '001010', SCORE.LIVE_TWO);
+  // 眠二
+  addPattern(6, '211000', SCORE.SLEEP_TWO);
+  addPattern(6, '000112', SCORE.SLEEP_TWO);
+  addPattern(6, '210100', SCORE.SLEEP_TWO);
+  addPattern(6, '001012', SCORE.SLEEP_TWO);
+  addPattern(6, '210010', SCORE.SLEEP_TWO);
+  addPattern(6, '010012', SCORE.SLEEP_TWO);
+
+  // ===== Zobrist：黑、白各一份 169 格的 32 位随机表 =====
+  let rngState = 0x9e3779b9;
+  function random32() {
+    rngState = (rngState + 0x6d2b79f5) | 0;
+    let t = rngState;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return (t ^ (t >>> 14)) >>> 0;
+  }
+
+  const ZOBRIST_BLACK = new Uint32Array(CELLS);
+  const ZOBRIST_WHITE = new Uint32Array(CELLS);
+  for (let i = 0; i < CELLS; i++) {
+    ZOBRIST_BLACK[i] = random32();
+    ZOBRIST_WHITE[i] = random32();
+  }
+  const SIDE_KEY = random32();
+
+  // ===== 引擎状态 =====
+  const LINE_COUNT = LINE_TABLES[0].length + LINE_TABLES[1].length + LINE_TABLES[2].length + LINE_TABLES[3].length;
+  const board = new Int8Array(CELLS);
+  const lineScores = new Int32Array(LINE_COUNT * 2);
+  let boardHash = 0;
+  let totalBlack = 0;
+  let totalWhite = 0;
+  const undoStack = [];
+  const transpositionTable = new Map();
+
+  let currentToken = 0;
+  let runToken = 0;
+  let searchNodes = 0;
+  let searchNodeLimit = 0;
+  let searchDeadline = 0;
+  let lastBoard = null;
+  let lastInfo = null;
+
+  function getZobrist(side, idx) {
+    return side === BLACK ? ZOBRIST_BLACK[idx] : ZOBRIST_WHITE[idx];
+  }
+
+  function ttKey(side) {
+    const h = (boardHash ^ (side === BLACK ? 0 : SIDE_KEY)) >>> 0;
+    return h.toString(36);
+  }
+
+  // 计算一条完全线段对某一方的模式总分
+  function segmentScoreForSide(cells, side) {
+    const n = cells.length + 2;
+    const digits = SEGMENT_SCRATCH;
+    digits[0] = 2;
+    digits[n - 1] = 2;
+    for (let i = 0; i < cells.length; i++) {
+      const v = board[cells[i]];
+      digits[i + 1] = v === EMPTY ? 0 : (v === side ? 1 : 2);
+    }
+    let total = 0;
+    let i = 0;
+    while (i <= n - 5) {
+      let code5 = 0;
+      for (let j = 0; j < 5; j++) code5 = code5 * 3 + digits[i + j];
+      const score5 = PATTERN_SCORE_5[code5];
+      let score6 = 0;
+      if (i + 6 <= n) {
+        let code6 = 0;
+        for (let j = 0; j < 6; j++) code6 = code6 * 3 + digits[i + j];
+        score6 = PATTERN_SCORE_6[code6];
+      }
+      if (score6 > score5) {
+        total += score6;
+        i += 6;
+      } else if (score5 > 0) {
+        total += score5;
+        i += 5;
+      } else {
+        i += 1;
+      }
+    }
+    return total;
+  }
+
+  // 重建全盘线段分与哈希（只在载入新棋盘时调用）
+  function recomputeAll() {
+    totalBlack = 0;
+    totalWhite = 0;
+    for (let seg = 0; seg < SEGMENTS.length; seg++) {
+      const b = segmentScoreForSide(SEGMENTS[seg], BLACK);
+      const w = segmentScoreForSide(SEGMENTS[seg], WHITE);
+      lineScores[seg * 2] = b;
+      lineScores[seg * 2 + 1] = w;
+      totalBlack += b;
+      totalWhite += w;
+    }
+    boardHash = 0;
+    for (let i = 0; i < CELLS; i++) {
+      if (board[i] !== EMPTY) boardHash ^= getZobrist(board[i], i);
+    }
+    undoStack.length = 0;
+  }
+
+  // updateLines：增量更新，只重算经过 idx 的 4 条线段
+  function updateLines(idx) {
+    const lines = POINT_LINES[idx];
+    for (let k = 0; k < lines.length; k++) {
+      const seg = lines[k].seg;
+      const base = seg * 2;
+      const nb = segmentScoreForSide(SEGMENTS[seg], BLACK);
+      const nw = segmentScoreForSide(SEGMENTS[seg], WHITE);
+      totalBlack += nb - lineScores[base];
+      totalWhite += nw - lineScores[base + 1];
+      lineScores[base] = nb;
+      lineScores[base + 1] = nw;
+    }
+  }
+
+  // makeMove：落子 + Zobrist + 4 条线增量
+  function makeMove(idx, side) {
+    if (board[idx] !== EMPTY) throw new Error('makeMove on occupied cell');
+    board[idx] = side;
+    boardHash ^= getZobrist(side, idx);
+    updateLines(idx);
+    undoStack.push({ idx: idx, side: side });
+  }
+
+  // unmakeMove：撤销落子，清空后重算同 4 条线，恢复增量评估
+  function unmakeMove() {
+    const rec = undoStack.pop();
+    if (!rec) return;
+    board[rec.idx] = EMPTY;
+    boardHash ^= getZobrist(rec.side, rec.idx);
+    updateLines(rec.idx);
+  }
+
+  function checkWinAt(idx, side) {
+    const x = idx % SIZE;
+    const y = (idx / SIZE) | 0;
+    for (let d = 0; d < DIRS.length; d++) {
+      const dx = DIRS[d][0];
+      const dy = DIRS[d][1];
+      let count = 1;
+      for (let sign = 1; sign >= -1; sign -= 2) {
+        let nx = x + dx * sign;
+        let ny = y + dy * sign;
+        while (inBounds(nx, ny) && board[ny * SIZE + nx] === side) {
+          count++;
+          nx += dx * sign;
+          ny += dy * sign;
+        }
+      }
+      if (count >= 5) return true;
+    }
+    return false;
+  }
+
+  function wouldWinAt(idx, side) {
+    if (board[idx] !== EMPTY) return false;
+    board[idx] = side;
+    const win = checkWinAt(idx, side);
+    board[idx] = EMPTY;
+    return win;
+  }
+
+  // evaluatePoint：点评估（走法排序 + 必防点检测），不更新全局线段分
+  function evaluatePoint(x, y, side, detail) {
+    const idx = y * SIZE + x;
+    if (board[idx] !== EMPTY) {
+      if (detail) {
+        detail.my = -1;
+        detail.opp = -1;
+      }
+      return -Infinity;
+    }
+    const my = pointPatternScore(idx, side);
+    const opp = pointPatternScore(idx, otherSide(side));
+    if (detail) {
+      detail.my = my;
+      detail.opp = opp;
+    }
+    return my + 0.9 * opp;
+  }
+
+  // 假设某方在 idx 落子后，经过该点的四条线中最高模式分
+  function pointPatternScore(idx, side) {
+    let best = 0;
+    const lines = POINT_LINES[idx];
+    for (let k = 0; k < lines.length; k++) {
+      const seg = lines[k].seg;
+      const cells = SEGMENTS[seg];
+      const n = cells.length + 2;
+      const vpos = lines[k].pos + 1;
+      const digits = POINT_SCRATCH;
+      digits[0] = 2;
+      digits[n - 1] = 2;
+      for (let i = 0; i < cells.length; i++) {
+        if (cells[i] === idx) {
+          digits[i + 1] = 1;
+        } else {
+          const v = board[cells[i]];
+          digits[i + 1] = v === EMPTY ? 0 : (v === side ? 1 : 2);
+        }
+      }
+      const start = Math.max(0, vpos - 5);
+      for (let i = start; i <= vpos; i++) {
+        if (i + 5 <= n && i + 4 >= vpos) {
+          let code5 = 0;
+          for (let j = 0; j < 5; j++) code5 = code5 * 3 + digits[i + j];
+          const v5 = PATTERN_SCORE_5[code5];
+          if (v5 > best) best = v5;
+        }
+        if (i + 6 <= n && i + 5 >= vpos) {
+          let code6 = 0;
+          for (let j = 0; j < 6; j++) code6 = code6 * 3 + digits[i + j];
+          const v6 = PATTERN_SCORE_6[code6];
+          if (v6 > best) best = v6;
+        }
+      }
+    }
+    return best;
+  }
+
+  // evaluateBoard：叶子局面评估（全盘线段分增量维护，不做全盘重扫）
+  function evaluateBoard(side) {
+    const mine = side === BLACK ? totalBlack : totalWhite;
+    const theirs = side === BLACK ? totalWhite : totalBlack;
+    return mine - 0.95 * theirs;
+  }
+
+  function isBoardFull() {
+    for (let i = 0; i < CELLS; i++) {
+      if (board[i] === EMPTY) return false;
+    }
+    return true;
+  }
+
+  function getNeighborhood() {
+    let stones = 0;
+    const marks = new Uint8Array(CELLS);
+    for (let i = 0; i < CELLS; i++) {
+      if (board[i] === EMPTY) continue;
+      stones++;
+      const x = i % SIZE;
+      const y = (i / SIZE) | 0;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (inBounds(nx, ny)) marks[ny * SIZE + nx] = 1;
+        }
+      }
+    }
+    if (stones === 0) return [6 * SIZE + 6];
+    const out = [];
+    for (let i = 0; i < CELLS; i++) {
+      if (marks[i] === 1 && board[i] === EMPTY) out.push(i);
+    }
+    return out;
+  }
+
+  // 生成有序候选：强制点永远插到第一位
+  function generateMoves(side, limit, forcedIdx, forcedIsAttack, ttMove) {
+    const points = getNeighborhood();
+    const scored = [];
+    let ownWin = -1;
+    let oppWin = -1;
+    let oppLiveFour = -1;
+    for (let i = 0; i < points.length; i++) {
+      const idx = points[i];
+      const x = idx % SIZE;
+      const y = (idx / SIZE) | 0;
+      const detail = { my: 0, opp: 0 };
+      let s = evaluatePoint(x, y, side, detail);
+      if (idx === ttMove) s += 1e12;
+      scored.push({ idx: idx, score: s, my: detail.my, opp: detail.opp });
+      if (detail.my >= SCORE.FIVE && ownWin < 0) ownWin = idx;
+      if (detail.opp >= SCORE.FIVE && oppWin < 0) oppWin = idx;
+      if (detail.opp >= SCORE.LIVE_FOUR && oppLiveFour < 0) oppLiveFour = idx;
+    }
+
+    let forced = forcedIdx;
+    if (ownWin >= 0 && !forcedIsAttack) {
+      forced = ownWin;
+    }
+    if (forced < 0) {
+      if (oppWin >= 0) forced = oppWin;
+      else if (oppLiveFour >= 0) forced = oppLiveFour;
+    }
+
+    scored.sort(function (a, b) { return b.score - a.score; });
+    const out = [];
+    if (forced >= 0 && board[forced] === EMPTY) out.push(forced);
+    for (let i = 0; i < scored.length && out.length < limit; i++) {
+      if (scored[i].idx !== forced) out.push(scored[i].idx);
+    }
+    if (out.length === 0 && points.length > 0) out.push(points[0]);
+    return out;
+  }
+
+  function findImmediateWinPoints(side) {
+    const points = getNeighborhood();
+    const out = [];
+    for (let i = 0; i < points.length; i++) {
+      if (wouldWinAt(points[i], side)) out.push(points[i]);
+    }
+    return out;
+  }
+
+  function threatMoves(side, minScore, limit) {
+    const points = getNeighborhood();
+    const arr = [];
+    for (let i = 0; i < points.length; i++) {
+      const idx = points[i];
+      const s = pointPatternScore(idx, side);
+      if (s >= minScore) arr.push({ idx: idx, score: s });
+    }
+    arr.sort(function (a, b) { return b.score - a.score; });
+    return arr.slice(0, limit);
+  }
+
+  function getDefenseMoves(attacker, limit) {
+    const defender = otherSide(attacker);
+    const points = getNeighborhood();
+    const arr = [];
+    for (let i = 0; i < points.length; i++) {
+      const idx = points[i];
+      let hold = pointPatternScore(idx, attacker);
+      // 只对“反杀五连”做一次便宜检查，避免每个防点再算一遍完整模式分
+      if (wouldWinAt(idx, defender)) hold += SCORE.FIVE;
+      if (hold <= 0) continue;
+      arr.push({ idx: idx, score: hold });
+    }
+    arr.sort(function (a, b) { return b.score - a.score; });
+    const out = [];
+    for (let i = 0; i < arr.length && out.length < limit; i++) out.push(arr[i].idx);
+    return out;
+  }
+
+  function checkSearchBudget() {
+    searchNodes++;
+    if ((searchNodes & NODE_MASK) !== 0) return;
+    if (runToken !== currentToken) throw SEARCH_ABORT;
+    if (searchNodes >= searchNodeLimit || nowMs() >= searchDeadline) throw SEARCH_ABORT;
+  }
+
+  // negamax：Negamax + Alpha-Beta；TT、时间、节点、Token 检查在此汇聚
+  function negamax(depth, alpha, beta, side, ply) {
+    checkSearchBudget();
+    if (depth <= 0) return evaluateBoard(side);
+    if (isBoardFull()) return 0;
+
+    const key = ttKey(side);
+    const entry = transpositionTable.get(key);
+    let ttMove = -1;
+    if (entry) {
+      ttMove = entry.move;
+      if (entry.depth >= depth) {
+        if (entry.flag === 'EXACT') return entry.score;
+        if (entry.flag === 'LOWER' && entry.score >= beta) return entry.score;
+        if (entry.flag === 'UPPER' && entry.score <= alpha) return entry.score;
+      }
+    }
+
+    // ttMove 是该局面上一轮搜索的首选（PV）；置换表命中时优先排序
+    const moves = generateMoves(side, MOVE_LIMIT, -1, false, ttMove);
+    if (moves.length === 0) return 0;
+
+    const alphaOrig = alpha;
+    let best = -INF;
+    let bestMove = -1;
+    for (let i = 0; i < moves.length; i++) {
+      const idx = moves[i];
+      makeMove(idx, side);
+      let score;
+      try {
+        if (checkWinAt(idx, side)) {
+          score = WIN_SCORE - ply;
+        } else {
+          score = -negamax(depth - 1, -beta, -alpha, otherSide(side), ply + 1);
+        }
+      } finally {
+        unmakeMove();
+      }
+      if (score > best) {
+        best = score;
+        bestMove = idx;
+      }
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break;
+    }
+
+    if (bestMove >= 0 && Math.abs(best) < WIN_THRESHOLD) {
+      let flag = 'EXACT';
+      if (best <= alphaOrig) flag = 'UPPER';
+      else if (best >= beta) flag = 'LOWER';
+      transpositionTable.set(key, { depth: depth, score: best, flag: flag, move: bestMove });
+      if (transpositionTable.size > TT_LIMIT) transpositionTable.clear();
+    }
+    return best;
+  }
+
+  // ===== TSS 威胁空间搜索 =====
+  function tssTick(ctx) {
+    ctx.nodes++;
+    if ((ctx.nodes & NODE_MASK) !== 0) return;
+    if (runToken !== currentToken) throw TSS_ABORT;
+    if (ctx.nodes >= ctx.limit || nowMs() >= ctx.deadline) throw TSS_ABORT;
+  }
+
+  // vcf：只走能形成冲四/活四的点；返回一条强制线
+  function vcf(side, depth, ctx) {
+    tssTick(ctx);
+    const myWins = findImmediateWinPoints(side);
+    if (myWins.length > 0) return { win: true, line: [myWins[0]] };
+    const oppWins = findImmediateWinPoints(otherSide(side));
+    if (oppWins.length >= 2) return { win: false };
+    const forced = oppWins.length === 1 ? oppWins[0] : -1;
+    if (depth <= 0) return { win: false };
+
+    const threats = threatMoves(side, SCORE.RUSH_FOUR, 16);
+    for (let t = 0; t < threats.length; t++) {
+      const m = threats[t];
+      if (forced >= 0 && m.idx !== forced) continue;
+      makeMove(m.idx, side);
+      let line = null;
+      try {
+        tssTick(ctx);
+        if (checkWinAt(m.idx, side)) {
+          line = [m.idx];
+        } else {
+          const defWins = findImmediateWinPoints(otherSide(side));
+          if (defWins.length === 0) {
+            const fivePts = findImmediateWinPoints(side);
+            if (fivePts.length >= 2) {
+              line = [m.idx, fivePts[0]];
+            } else if (fivePts.length === 1) {
+              const block = fivePts[0];
+              if (!wouldWinAt(block, otherSide(side))) {
+                makeMove(block, otherSide(side));
+                let next = null;
+                try {
+                  next = vcf(side, depth - 1, ctx);
+                } finally {
+                  unmakeMove();
+                }
+                if (next.win) line = [m.idx, block].concat(next.line);
+              }
+            }
+          }
+        }
+      } finally {
+        unmakeMove();
+      }
+      if (line) return { win: true, line: line };
+    }
+    return { win: false };
+  }
+
+  function vcfSearch(side, ctx) {
+    const res = vcf(side, 14, ctx);
+    if (res.win) return { found: true, move: res.line[0], line: res.line };
+    return { found: false };
+  }
+
+  // vct：允许活三/冲四/活四，防守方多应手全对抗后才算成立
+  function vct(side, depth, ctx, rootVerify) {
+    tssTick(ctx);
+    const myWins = findImmediateWinPoints(side);
+    if (myWins.length > 0) return { win: true, line: [myWins[0]] };
+    const oppWins = findImmediateWinPoints(otherSide(side));
+    if (oppWins.length >= 2) return { win: false };
+    const forced = oppWins.length === 1 ? oppWins[0] : -1;
+    if (depth <= 0) return { win: false };
+
+    const threats = threatMoves(side, SCORE.LIVE_THREE, 10);
+    for (let t = 0; t < threats.length; t++) {
+      const m = threats[t];
+      if (forced >= 0 && m.idx !== forced) continue;
+      makeMove(m.idx, side);
+      let line = null;
+      try {
+        tssTick(ctx);
+        if (checkWinAt(m.idx, side)) {
+          line = [m.idx];
+        } else {
+          const defWins = findImmediateWinPoints(otherSide(side));
+          if (defWins.length === 0) {
+            const fivePts = findImmediateWinPoints(side);
+            if (fivePts.length >= 2) {
+              line = [m.idx, fivePts[0]];
+            } else if (fivePts.length === 1) {
+              const block = fivePts[0];
+              if (!wouldWinAt(block, otherSide(side))) {
+                makeMove(block, otherSide(side));
+                let next = null;
+                try {
+                  next = vct(side, depth - 1, ctx);
+                } finally {
+                  unmakeMove();
+                }
+                if (next.win) line = [m.idx, block].concat(next.line);
+              }
+            } else {
+              const defenses = getDefenseMoves(side, 6);
+              if (defenses.length > 0) {
+                let allWin = true;
+                let sampleLine = null;
+                for (let d = 0; d < defenses.length; d++) {
+                  if (wouldWinAt(defenses[d], otherSide(side))) {
+                    allWin = false;
+                    break;
+                  }
+                  makeMove(defenses[d], otherSide(side));
+                  let sub = null;
+                  try {
+                    sub = vct(side, depth - 1, ctx);
+                  } finally {
+                    unmakeMove();
+                  }
+                  if (!sub.win) {
+                    allWin = false;
+                    break;
+                  }
+                  if (!sampleLine) sampleLine = sub.line;
+                }
+                if (allWin && sampleLine) {
+                  line = [m.idx, defenses[0]].concat(sampleLine);
+                }
+              }
+            }
+          }
+        }
+      } finally {
+        unmakeMove();
+      }
+      if (line) {
+        if (rootVerify && !rootVerify(m.idx)) continue;
+        return { win: true, line: line };
+      }
+    }
+    return { win: false };
+  }
+
+  // VCT 双向校验：己方根候选落子后，对手若还有 VCF/VCT 反击则该候选作废
+  function vctSearch(side, ctx) {
+    const res = vct(side, 8, ctx, function (rootMove) {
+      makeMove(rootMove, side);
+      try {
+        if (checkWinAt(rootMove, side)) return true;
+        const oppVcf = vcf(otherSide(side), 8, ctx);
+        if (oppVcf.win) return false;
+        const oppVct = vct(otherSide(side), 4, ctx);
+        return !oppVct.win;
+      } finally {
+        unmakeMove();
+      }
+    });
+    if (!res.win) return { found: false };
+    return { found: true, move: res.line[0], line: res.line };
+  }
+
+  function makeSubTssCtx(maxNodes, totalLimit, totalUsed, deadline) {
+    return {
+      nodes: 0,
+      limit: Math.max(0, Math.min(maxNodes, totalLimit - totalUsed)),
+      deadline: deadline
+    };
+  }
+
+  // runTSS：返回三态（己方胜 / 对手胜 / 必须防点）或未命中
+  function runTSS(side, nodeBudget, deadline) {
+    const totalLimit = Math.max(0, nodeBudget);
+    const state = { used: 0, exhausted: false, deadline: deadline };
+    if (totalLimit <= 0 || nowMs() >= deadline) {
+      return { found: false, exhausted: true, nodes: 0 };
+    }
+
+    function runSub(fn, maxNodes) {
+      if (state.used >= totalLimit || nowMs() >= state.deadline) {
+        state.exhausted = true;
+        return null;
+      }
+      const ctx = makeSubTssCtx(maxNodes, totalLimit, state.used, state.deadline);
+      if (ctx.limit <= 0) {
+        state.exhausted = true;
+        return null;
+      }
+      try {
+        const result = fn(ctx);
+        state.used += ctx.nodes;
+        return result;
+      } catch (err) {
+        state.used += ctx.nodes;
+        if (err === TSS_ABORT) {
+          state.exhausted = true;
+          return null;
+        }
+        throw err;
+      }
+    }
+
+    const ownVcf = runSub(function (ctx) { return vcfSearch(side, ctx); }, 20000);
+    if (ownVcf && ownVcf.found) {
+      return { found: true, score: WIN_SCORE, tag: 'VCF', move: ownVcf.move, nodes: state.used, exhausted: false };
+    }
+
+    const ownVct = runSub(function (ctx) { return vctSearch(side, ctx); }, 30000);
+    if (ownVct && ownVct.found) {
+      return { found: true, score: WIN_SCORE, tag: 'VCT', move: ownVct.move, nodes: state.used, exhausted: false };
+    }
+
+    if (state.used >= totalLimit || nowMs() >= state.deadline) {
+      state.exhausted = true;
+      return { found: false, exhausted: state.exhausted, nodes: state.used };
+    }
+
+    // 对手即时五连点：两个以上必败，一个则必须防
+    const oppImmediate = findImmediateWinPoints(otherSide(side));
+    if (oppImmediate.length >= 2) {
+      return { found: true, score: -WIN_SCORE, tag: 'LOSS', move: -1, nodes: state.used, exhausted: false };
+    }
+    if (oppImmediate.length === 1) {
+      return { found: false, mustBlock: oppImmediate[0], nodes: state.used, exhausted: false };
+    }
+
+    // 对手 VCF：找到其起点则占住起点作为必防点
+    const oppVcf = runSub(function (ctx) { return vcfSearch(otherSide(side), ctx); }, 20000);
+    if (oppVcf && oppVcf.found) {
+      if (oppVcf.move >= 0 && board[oppVcf.move] === EMPTY) {
+        return { found: false, mustBlock: oppVcf.move, nodes: state.used, exhausted: false };
+      }
+      return { found: true, score: -WIN_SCORE, tag: 'LOSS', move: -1, nodes: state.used, exhausted: false };
+    }
+
+    // 对手 VCT
+    const oppVct = runSub(function (ctx) { return vct(otherSide(side), 8, ctx); }, 30000);
+    if (oppVct && oppVct.win) {
+      if (oppVct.line[0] >= 0 && board[oppVct.line[0]] === EMPTY) {
+        return { found: false, mustBlock: oppVct.line[0], nodes: state.used, exhausted: false };
+      }
+      return { found: true, score: -WIN_SCORE, tag: 'LOSS', move: -1, nodes: state.used, exhausted: false };
+    }
+
+    return {
+      found: false,
+      exhausted: state.exhausted,
+      nodes: state.used
+    };
+  }
+
+  // ===== 根节点搜索与结果组装 =====
+  // searchRoot：迭代加深；根节点每个候选都用全窗口独立搜索，禁止 alpha 传播
+  function searchRoot(side, tss, maxDepth, emit, requestId) {
+    let forced = -1;
+    let forcedIsAttack = false;
+    if (tss && tss.found && tss.move >= 0) {
+      forced = tss.move;
+      forcedIsAttack = true;
+    } else if (tss && tss.mustBlock !== undefined && tss.mustBlock >= 0) {
+      forced = tss.mustBlock;
+    }
+
+    const rootMoves = generateMoves(side, ROOT_LIMIT, forced, forcedIsAttack, -1);
+    const scores = new Map();
+    let depthDone = 0;
+    let truncated = false;
+    let order = rootMoves.slice();
+
+    for (let depth = 2; depth <= maxDepth; depth++) {
+      if (nowMs() >= searchDeadline || searchNodes >= searchNodeLimit) {
+        truncated = true;
+        break;
+      }
+      const iter = new Map();
+      let aborted = false;
+      for (let i = 0; i < order.length; i++) {
+        const idx = order[i];
+        if (runToken !== currentToken) {
+          truncated = true;
+          aborted = true;
+          break;
+        }
+        if (nowMs() >= searchDeadline || searchNodes >= searchNodeLimit) {
+          truncated = true;
+          aborted = true;
+          break;
+        }
+        makeMove(idx, side);
+        let score;
+        try {
+          if (checkWinAt(idx, side)) {
+            score = WIN_SCORE - 1;
+          } else {
+            score = -negamax(depth - 1, -INF, INF, otherSide(side), 1);
+          }
+        } catch (err) {
+          if (err === SEARCH_ABORT) {
+            truncated = true;
+            aborted = true;
+            break;
+          }
+          throw err;
+        } finally {
+          unmakeMove();
+        }
+        iter.set(idx, score);
+      }
+      if (aborted) break;
+      if (iter.size !== order.length) {
+        truncated = true;
+        break;
+      }
+      scores.clear();
+      iter.forEach(function (v, k) { scores.set(k, v); });
+      depthDone = depth;
+      // 用上一层迭代的根 PV 分数重排，下一层优先搜 PV 候选
+      order.sort(function (a, b) { return (iter.get(b) || 0) - (iter.get(a) || 0); });
+      emit({ type: 'progress', requestId: requestId, depth: depth });
+      let top = -INF;
+      scores.forEach(function (v) { if (v > top) top = v; });
+      if (top >= WIN_THRESHOLD && depth >= 4) break;
+    }
+
+    return {
+      rootMoves: rootMoves,
+      scores: scores,
+      depth: depthDone,
+      truncated: truncated
+    };
+  }
+
+  function findPlayedCell(prev, current) {
+    if (!prev) return { idx: -1, side: 0 };
+    let count = 0;
+    let idx = -1;
+    let removed = false;
+    for (let i = 0; i < CELLS; i++) {
+      if (prev[i] !== current[i]) {
+        count++;
+        idx = i;
+        if (prev[i] !== EMPTY || current[i] === EMPTY) removed = true;
+      }
+    }
+    if (count !== 1 || removed) return { idx: -1, side: 0 };
+    return { idx: idx, side: current[idx] };
+  }
+
+  // formatBest：把根节点精确分转成 UI 契约格式，TSS 结论优先于普通推荐
+  function formatBest(ranked, tss) {
+    let list = ranked.slice();
+    if (list.length === 0) {
+      return {
+        best: { x: -1, y: -1, score: 0, isWin: false, tag: null },
+        top15: []
+      };
+    }
+
+    if (tss && tss.found && tss.move >= 0) {
+      let found = -1;
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].idx === tss.move) {
+          found = i;
+          break;
+        }
+      }
+      if (found < 0) {
+        list.push({ idx: tss.move, score: tss.score });
+      } else {
+        list[found].score = tss.score;
+      }
+      list.sort(function (a, b) { return b.score - a.score; });
+      list = list.slice(0, ROOT_LIMIT);
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].idx === tss.move) {
+          const tmp = list[i];
+          list.splice(i, 1);
+          list.unshift(tmp);
+          break;
+        }
+      }
+    }
+
+    const top15 = [];
+    for (let i = 0; i < list.length && i < ROOT_LIMIT; i++) {
+      const item = list[i];
+      let score = item.score;
+      let tag = 'REC';
+      let isWin = score >= WIN_THRESHOLD;
+      if (tss && tss.found && tss.move === item.idx) {
+        score = tss.score;
+        tag = tss.tag === 'VCF' || tss.tag === 'VCT' ? tss.tag : 'REC';
+        isWin = score >= WIN_THRESHOLD;
+      }
+      top15.push({
+        x: item.idx % SIZE,
+        y: (item.idx / SIZE) | 0,
+        score: score,
+        isWin: isWin,
+        tag: tag
+      });
+    }
+    const best = Object.assign({}, top15[0]);
+    if (tss && tss.found && tss.score <= -WIN_SCORE) {
+      // TSS 已证明对手必杀：best 明确报 LOSS 分，热力图仍保留根节点精确分
+      best.score = -WIN_SCORE;
+      best.isWin = false;
+      best.tag = 'REC';
+    }
+    return { best: best, top15: top15 };
+  }
+
+  function analyzeMessage(msg, emit) {
+    if (!msg || msg.type !== 'analyze') return;
+    const requestId = msg.requestId | 0;
+    const side = msg.side === 1 ? BLACK : WHITE;
+    const timeBudgetMs = Math.max(80, Math.min(15000, Number(msg.timeBudgetMs) || 1000));
+    const nodeBudget = Math.max(2000, Math.min(2000000, Number(msg.nodeBudget) || 200000));
+    const token = ++currentToken;
+    runToken = token;
+    const startedAt = nowMs();
+    searchDeadline = startedAt + timeBudgetMs;
+    searchNodeLimit = nodeBudget;
+    searchNodes = 0;
+
+    const prevInfo = lastInfo;
+    const prevBoard = lastBoard;
+    const incoming = msg.board instanceof Int8Array ? msg.board : new Int8Array(msg.board);
+    board.set(incoming);
+    recomputeAll();
+    const played = findPlayedCell(prevBoard, board);
+
+    // 如果盘面已经终局，直接返回空候选
+    let existingWin = false;
+    for (let i = 0; i < CELLS; i++) {
+      if (board[i] !== EMPTY && checkWinAt(i, board[i])) {
+        existingWin = true;
+        break;
+      }
+    }
+
+    if (existingWin || isBoardFull()) {
+      const empty = { best: { x: -1, y: -1, score: 0, isWin: false, tag: null }, top15: [] };
+      if (runToken === currentToken) {
+        emit({
+          type: 'result',
+          requestId: requestId,
+          best: empty.best,
+          top15: [],
+          lossFromPlayer: null,
+          meta: { depth: 0, nodes: 0, timeMs: nowMs() - startedAt, truncated: false }
+        });
+        lastInfo = null;
+        lastBoard = new Int8Array(board);
+      }
+      return;
+    }
+
+    const tssBudget = Math.floor(nodeBudget * 0.3);
+    // TSS 的节点配额固定为 30%；时间上允许它先用更多预算找必杀，再交给根搜索
+    const tssDeadline = startedAt + Math.max(80, timeBudgetMs * 0.8);
+    let tss = null;
+    try {
+      tss = runTSS(side, tssBudget, tssDeadline);
+    } catch (err) {
+      tss = { found: false, exhausted: true, nodes: 0 };
+    }
+
+    const depthCap = timeBudgetMs <= 350 ? 4 : (timeBudgetMs <= 1200 ? 6 : MAX_DEPTH);
+    let rootResult = null;
+    try {
+      rootResult = searchRoot(side, tss, depthCap, emit, requestId);
+    } catch (err) {
+      if (err === SEARCH_ABORT) {
+        rootResult = { rootMoves: [], scores: new Map(), depth: 0, truncated: true };
+      } else {
+        throw err;
+      }
+    }
+
+    let ranked = [];
+    if (rootResult.scores.size > 0) {
+      rootResult.scores.forEach(function (score, idx) {
+        ranked.push({ idx: idx, score: score });
+      });
+      ranked.sort(function (a, b) { return b.score - a.score; });
+    } else {
+      // 极端超时兜底：用点评估分代替，仍保证有推荐点
+      const fallbackMoves = generateMoves(side, ROOT_LIMIT, -1, false, -1);
+      for (let i = 0; i < fallbackMoves.length; i++) {
+        const idx = fallbackMoves[i];
+        const x = idx % SIZE;
+        const y = (idx / SIZE) | 0;
+        ranked.push({ idx: idx, score: evaluatePoint(x, y, side) });
+      }
+      ranked.sort(function (a, b) { return b.score - a.score; });
+    }
+
+    const formatted = formatBest(ranked, tss);
+    let lossFromPlayer = null;
+    if (prevInfo && played.idx >= 0 && prevInfo.side === played.side) {
+      const oldScore = prevInfo.scores ? prevInfo.scores.get(played.idx) : undefined;
+      if (oldScore !== undefined) {
+        lossFromPlayer = prevInfo.bestScore - oldScore;
+      } else if (prevInfo.scores && prevInfo.scores.size > 0) {
+        // 未进入上轮 Top15：按最差候选再额外罚分估算，避免显示成 0 损失
+        let worst = INF;
+        prevInfo.scores.forEach(function (v) { if (v < worst) worst = v; });
+        lossFromPlayer = prevInfo.bestScore - (worst - 2000);
+        if (lossFromPlayer < 0) lossFromPlayer = 2000;
+      } else if (formatted.best && otherSide(played.side) === side) {
+        lossFromPlayer = prevInfo.bestScore + formatted.best.score;
+      }
+      if (lossFromPlayer !== null && isFinite(lossFromPlayer)) {
+        lossFromPlayer = Math.max(0, Math.round(lossFromPlayer));
+      } else {
+        lossFromPlayer = null;
+      }
+    }
+
+    const meta = {
+      depth: rootResult.depth,
+      nodes: searchNodes + (tss ? tss.nodes : 0),
+      timeMs: Math.round(nowMs() - startedAt),
+      truncated: !!(rootResult.truncated || (tss && tss.exhausted) || rootResult.depth === 0)
+    };
+
+    if (runToken !== currentToken) return;
+    emit({
+      type: 'result',
+      requestId: requestId,
+      best: formatted.best,
+      top15: formatted.top15,
+      lossFromPlayer: lossFromPlayer,
+      meta: meta
+    });
+
+    lastBoard = new Int8Array(board);
+    if (formatted.best && formatted.best.x >= 0) {
+      const scoreMap = new Map();
+      for (let i = 0; i < formatted.top15.length; i++) {
+        const item = formatted.top15[i];
+        scoreMap.set(item.y * SIZE + item.x, item.score);
+      }
+      lastInfo = {
+        side: side,
+        bestScore: formatted.best.score,
+        scores: scoreMap
+      };
+    } else {
+      lastInfo = null;
+    }
+  }
+
+  function cancelSearch() {
+    currentToken++;
+    lastBoard = null;
+    lastInfo = null;
+  }
+
+  // 暴露给主线程降级调用；Worker 环境中同时注册消息入口
+  root.__GOMOKU_ENGINE__ = {
+    analyzeMessage: analyzeMessage,
+    cancelSearch: cancelSearch
+  };
+
+  if (typeof importScripts === 'function' && root && typeof root.postMessage === 'function') {
+    root.onmessage = function (event) {
+      const data = event.data;
+      if (!data || typeof data.type !== 'string') return;
+      if (data.type === 'cancel') {
+        cancelSearch();
+        return;
+      }
+      if (data.type !== 'analyze') return;
+      try {
+        analyzeMessage(data, function (message) {
+          root.postMessage(message);
+        });
+      } catch (err) {
+        if (err === SEARCH_ABORT || err === TSS_ABORT) return;
+        root.postMessage({
+          type: 'error',
+          requestId: data.requestId,
+          message: err && err.message ? err.message : String(err)
+        });
+      }
+    };
+  }
+})(self);
+
+</script>
+<script>
+(function () {
+  'use strict';
+
+  // ===== 共享常量（与 workerCode 内的定义保持一致） =====
+  const SIZE = 13;
+  const DPR_MAX = 3;
+  const BLACK = 1;
+  const WHITE = -1;
+  const WIN_THRESHOLD = 5000000;
+
+  const DIFFICULTIES = Object.freeze({
+    fast: { label: '浅', timeBudgetMs: 300, nodeBudget: 80000 },
+    standard: { label: '标准', timeBudgetMs: 1000, nodeBudget: 200000 },
+    deep: { label: '深', timeBudgetMs: 2500, nodeBudget: 400000 }
+  });
+
+  const state = {
+    board: new Int8Array(SIZE * SIZE),
+    turn: BLACK,
+    humanSide: BLACK,
+    history: [],
+    lastMove: null,
+    winner: 0,
+    gameOver: false,
+    difficulty: 'standard',
+    requestId: 0,
+    analyzing: false,
+    result: null,
+    degraded: false,
+    hoverIdx: -1,
+    lastPayload: null,
+    autoOpponent: false,
+    hintsVisible: true,
+    catchup: null,
+    catchupSeq: 0,
+    interruptContext: null
+  };
+
+  const canvas = document.getElementById('boardCanvas');
+  const ctx = canvas.getContext('2d');
+  const el = {
+    statusText: document.getElementById('statusText'),
+    statusDot: document.getElementById('statusDot'),
+    lossText: document.getElementById('lossText'),
+    calcBadge: document.getElementById('calcBadge'),
+    degradedBadge: document.getElementById('degradedBadge'),
+    turnChip: document.getElementById('turnChip'),
+    moveCount: document.getElementById('moveCount'),
+    ruleNote: document.getElementById('ruleNote'),
+    sideGroup: document.getElementById('sideGroup'),
+    difficultyGroup: document.getElementById('difficultyGroup'),
+    autoOpponentBtn: document.getElementById('autoOpponentBtn'),
+    autoOpponentLabel: document.getElementById('autoOpponentLabel'),
+    hintsBtn: document.getElementById('hintsBtn'),
+    hintsLabel: document.getElementById('hintsLabel'),
+    scoreChart: document.getElementById('scoreChart'),
+    scoreChartHint: document.getElementById('scoreChartHint'),
+    undoBtn: document.getElementById('undoBtn'),
+    restartBtn: document.getElementById('restartBtn')
+  };
+
+  const WORKER_SOURCE = document.getElementById('workerCode').textContent;
+  let worker = null;
+  let workerUrl = null;
+  let fallbackEngine = null;
+  let fallbackBroken = false;
+  let autoMoveTimer = 0;
+
+  let boardCss = 0;
+  let cellSize = 0;
+  let boardPad = 0;
+  let stoneRadius = 0;
+
+  function idxOf(x, y) {
+    return y * SIZE + x;
+  }
+
+  function otherSide(side) {
+    return side === BLACK ? WHITE : BLACK;
+  }
+
+  function sideName(side) {
+    return side === BLACK ? '黑' : '白';
+  }
+
+  function formatInt(n) {
+    if (!isFinite(n)) return '—';
+    return Math.round(n).toLocaleString('zh-CN');
+  }
+
+  function formatScore(n) {
+    if (!isFinite(n)) return '—';
+    if (n >= WIN_THRESHOLD) return 'WIN';
+    if (n <= -WIN_THRESHOLD) return 'LOSS';
+    return formatInt(n);
+  }
+
+  // ===== Canvas / DPR =====
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const css = Math.floor(Math.min(rect.width, rect.height || rect.width));
+    if (css < 80) return;
+    boardCss = css;
+    const dpr = Math.max(1, Math.min(DPR_MAX, window.devicePixelRatio || 1));
+    canvas.width = Math.round(css * dpr);
+    canvas.height = Math.round(css * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    boardPad = css * 0.075;
+    cellSize = (css - boardPad * 2) / (SIZE - 1);
+    stoneRadius = cellSize * 0.41;
+    drawBoard();
+  }
+
+  function gridPos(i) {
+    return boardPad + i * cellSize;
+  }
+
+  function isOnBoard(x, y) {
+    return x >= 0 && x < SIZE && y >= 0 && y < SIZE;
+  }
+
+  function drawBoard() {
+    if (!boardCss) return;
+    const size = boardCss;
+    ctx.clearRect(0, 0, size, size);
+
+    // 棋盘底
+    const bg = ctx.createRadialGradient(size * 0.32, size * 0.22, 0, size * 0.52, size * 0.55, size * 0.88);
+    bg.addColorStop(0, '#1b2534');
+    bg.addColorStop(0.58, '#141c28');
+    bg.addColorStop(1, '#0e141d');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, size, size);
+
+    // 内边框
+    ctx.strokeStyle = 'rgba(154, 181, 218, 0.09)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+
+    // 网格
+    for (let i = 0; i < SIZE; i++) {
+      const p = gridPos(i);
+      const outer = i === 0 || i === SIZE - 1;
+      ctx.beginPath();
+      ctx.strokeStyle = outer ? 'rgba(164, 190, 225, 0.28)' : 'rgba(148, 174, 208, 0.18)';
+      ctx.lineWidth = outer ? 1.25 : 0.8;
+      ctx.moveTo(p, boardPad);
+      ctx.lineTo(p, size - boardPad);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(boardPad, p);
+      ctx.lineTo(size - boardPad, p);
+      ctx.stroke();
+    }
+
+    // 星位
+    drawStar(3, 3);
+    drawStar(3, 9);
+    drawStar(9, 3);
+    drawStar(9, 9);
+    drawStar(6, 6);
+
+    // 热力图在棋子下方（提示关闭时不绘制）
+    if (state.hintsVisible) drawHeatmap();
+
+    // 棋子
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const v = state.board[idxOf(x, y)];
+        if (v === 0) continue;
+        drawStone(x, y, v);
+      }
+    }
+
+    // 最后一手红点
+    if (state.lastMove) {
+      const cx = gridPos(state.lastMove.x);
+      const cy = gridPos(state.lastMove.y);
+      ctx.save();
+      ctx.fillStyle = '#ff4f5e';
+      ctx.shadowColor = 'rgba(255, 79, 94, 0.58)';
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // AI 推荐点金色虚线圈（提示关闭时不绘制）
+    if (state.hintsVisible) drawRecommendation();
+
+    // 鼠标悬停预览
+    if (!state.gameOver && state.hoverIdx >= 0 && state.board[state.hoverIdx] === 0) {
+      const hx = state.hoverIdx % SIZE;
+      const hy = (state.hoverIdx / SIZE) | 0;
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      drawStone(hx, hy, state.turn);
+      ctx.restore();
+    }
+  }
+
+  function drawStar(x, y) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(176, 199, 229, 0.62)';
+    ctx.beginPath();
+    ctx.arc(gridPos(x), gridPos(y), Math.max(2.2, cellSize * 0.065), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawStone(x, y, side, alpha) {
+    const cx = gridPos(x);
+    const cy = gridPos(y);
+    const r = stoneRadius;
+    ctx.save();
+    if (alpha !== undefined) ctx.globalAlpha = alpha;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+    ctx.shadowBlur = Math.max(3, r * 0.4);
+    ctx.shadowOffsetY = Math.max(1, r * 0.16);
+    const g = ctx.createRadialGradient(cx - r * 0.32, cy - r * 0.38, r * 0.08, cx, cy, r * 1.05);
+    if (side === BLACK) {
+      g.addColorStop(0, '#505050');
+      g.addColorStop(0.42, '#252527');
+      g.addColorStop(1, '#000000');
+    } else {
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.5, '#eef1f4');
+      g.addColorStop(1, '#b9bec8');
+    }
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 0.8;
+    ctx.strokeStyle = side === BLACK ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.18)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 0.4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawHeatmap() {
+    if (!state.result || !Array.isArray(state.result.top15)) return;
+    const top15 = state.result.top15;
+    const ordinary = [];
+    for (let i = 0; i < top15.length; i++) {
+      if (!top15[i].isWin) ordinary.push(top15[i].score);
+    }
+    let min = 0;
+    let max = 1;
+    if (ordinary.length > 0) {
+      min = Math.min.apply(null, ordinary);
+      max = Math.max.apply(null, ordinary);
+    }
+
+    for (let i = 0; i < top15.length; i++) {
+      const move = top15[i];
+      if (!move || !isOnBoard(move.x, move.y)) continue;
+      if (state.board[idxOf(move.x, move.y)] !== 0) continue;
+      const cx = gridPos(move.x);
+      const cy = gridPos(move.y);
+      if (move.isWin || move.score >= WIN_THRESHOLD) {
+        const tag = move.tag === 'VCF' ? 'VCF' : (move.tag === 'VCT' ? 'VCT' : 'WIN');
+        const radius = cellSize * 0.48;
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+        grad.addColorStop(0, 'rgba(255, 60, 82, 0.5)');
+        grad.addColorStop(0.7, 'rgba(238, 44, 69, 0.27)');
+        grad.addColorStop(1, 'rgba(255, 60, 82, 0)');
+        ctx.save();
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 111, 125, 0.8)';
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 0.72, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#ffd5da';
+        ctx.font = '700 ' + Math.max(9, Math.round(cellSize * 0.22)) + 'px "Segoe UI", "PingFang SC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4;
+        ctx.fillText(tag, cx, cy + 0.5);
+        ctx.restore();
+      } else {
+        const t = max > min ? (move.score - min) / (max - min) : 0.5;
+        const hue = 215 + 115 * t;
+        const radius = cellSize * (0.16 + 0.17 * t);
+        ctx.save();
+        ctx.globalAlpha = 0.25 + 0.3 * t;
+        ctx.fillStyle = 'hsl(' + hue + ' 86% 62%)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'hsla(' + hue + ', 90%, 76%, 0.22)';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        const label = String(Math.round(t * 99)).padStart(2, '0');
+        ctx.fillStyle = 'rgba(239, 246, 255, 0.94)';
+        ctx.font = '650 ' + Math.max(9, Math.round(cellSize * 0.23)) + 'px "Cascadia Code", Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+        ctx.shadowBlur = 3;
+        ctx.fillText(label, cx, cy + 0.5);
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawRecommendation() {
+    if (state.gameOver || !state.result || !state.result.best) return;
+    const best = state.result.best;
+    if (!isOnBoard(best.x, best.y)) return;
+    if (state.board[idxOf(best.x, best.y)] !== 0) return;
+    const cx = gridPos(best.x);
+    const cy = gridPos(best.y);
+    const overlapsLast = !!(state.lastMove && state.lastMove.x === best.x && state.lastMove.y === best.y);
+    const radius = stoneRadius + (overlapsLast ? Math.max(9, cellSize * 0.24) : Math.max(4, cellSize * 0.1));
+    ctx.save();
+    ctx.strokeStyle = '#f6c453';
+    ctx.lineWidth = Math.max(1.8, cellSize * 0.045);
+    ctx.setLineDash([4, 4]);
+    ctx.lineDashOffset = 0;
+    ctx.shadowColor = 'rgba(246, 196, 83, 0.72)';
+    ctx.shadowBlur = 9;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ===== 交互坐标 =====
+  function pointFromEvent(event) {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const scaleX = boardCss / rect.width;
+    const scaleY = boardCss / rect.height;
+    const px = (event.clientX - rect.left) * scaleX;
+    const py = (event.clientY - rect.top) * scaleY;
+    const x = Math.round((px - boardPad) / cellSize);
+    const y = Math.round((py - boardPad) / cellSize);
+    if (!isOnBoard(x, y)) return null;
+    const cx = gridPos(x);
+    const cy = gridPos(y);
+    const dist = Math.hypot(px - cx, py - cy);
+    if (dist > cellSize * 0.58) return null;
+    return { x: x, y: y, idx: idxOf(x, y) };
+  }
+
+  // ===== 状态栏 =====
+  function setBusyUi(busy) {
+    el.statusDot.classList.toggle('busy', busy);
+    el.calcBadge.hidden = !busy;
+  }
+
+  function setStatus(text, lossText) {
+    el.statusText.textContent = text;
+    if (lossText !== undefined) el.lossText.textContent = lossText;
+  }
+
+  function updateUnderBoard() {
+    if (state.gameOver) {
+      el.turnChip.textContent = state.winner === 0 ? '和棋' : sideName(state.winner) + '方获胜';
+      el.turnChip.classList.remove('white');
+    } else {
+      el.turnChip.textContent = '轮到' + sideName(state.turn) + '方';
+      el.turnChip.classList.toggle('white', state.turn === WHITE);
+    }
+    el.moveCount.textContent = '第 ' + state.history.length + ' 手';
+    el.ruleNote.textContent = '你执' + sideName(state.humanSide) + ' · ' + (state.autoOpponent ? '自动' : '手动');
+  }
+
+  function updateControls() {
+    const sideButtons = el.sideGroup.querySelectorAll('[data-side]');
+    sideButtons.forEach(function (button) {
+      button.classList.toggle('active', Number(button.getAttribute('data-side')) === state.humanSide);
+    });
+    const diffButtons = el.difficultyGroup.querySelectorAll('[data-diff]');
+    diffButtons.forEach(function (button) {
+      button.classList.toggle('active', button.getAttribute('data-diff') === state.difficulty);
+    });
+    el.autoOpponentBtn.classList.toggle('active', state.autoOpponent);
+    el.autoOpponentBtn.setAttribute('aria-pressed', state.autoOpponent ? 'true' : 'false');
+    el.autoOpponentLabel.textContent = '自动对手：' + (state.autoOpponent ? '开' : '关');
+    el.hintsBtn.classList.toggle('active', state.hintsVisible);
+    el.hintsBtn.setAttribute('aria-pressed', state.hintsVisible ? 'true' : 'false');
+    el.hintsLabel.textContent = '提示：' + (state.hintsVisible ? '开' : '关');
+  }
+
+  // ===== Worker / 降级 =====
+  function createWorker() {
+    if (typeof Worker !== 'function') throw new Error('浏览器不支持 Worker');
+    if (!workerUrl) {
+      const blob = new Blob([WORKER_SOURCE], { type: 'application/javascript' });
+      workerUrl = URL.createObjectURL(blob);
+    }
+    const w = new Worker(workerUrl);
+    w.addEventListener('message', function (event) {
+      if (worker === w) handleEngineMessage(event.data);
+    });
+    w.addEventListener('error', function (event) {
+      if (worker === w) onWorkerError(event);
+    });
+    return w;
+  }
+
+  function ensureWorker() {
+    if (worker) return true;
+    if (state.degraded) return false;
+    try {
+      worker = createWorker();
+      return true;
+    } catch (err) {
+      activateFallback(err);
+      return false;
+    }
+  }
+
+  function initEngine() {
+    ensureWorker();
+  }
+
+  // 用户在新搜索期间落子时，硬终止旧 Worker 并立即重建；
+  // 这比“旧搜索跑完再处理新请求”响应更快，旧结果仍由 requestId 兜底。
+  function interruptWorker() {
+    if (!worker || state.degraded) return;
+    try { worker.terminate(); } catch (err) { /* 忽略终止异常 */ }
+    worker = null;
+    ensureWorker();
+  }
+
+  function activateFallback(reason) {
+    if (state.degraded) return;
+    if (worker) {
+      try { worker.terminate(); } catch (err) { /* 忽略终止异常 */ }
+      worker = null;
+    }
+    if (workerUrl) {
+      try { URL.revokeObjectURL(workerUrl); } catch (err) { /* 忽略 */ }
+      workerUrl = null;
+    }
+    try {
+      const fakeSelf = { postMessage: handleEngineMessage };
+      const factory = new Function('self', WORKER_SOURCE + '\nreturn self.__GOMOKU_ENGINE__;');
+      const engine = factory(fakeSelf);
+      if (!engine || typeof engine.analyzeMessage !== 'function') throw new Error('降级引擎创建失败');
+      fallbackEngine = engine;
+      state.degraded = true;
+      el.degradedBadge.hidden = false;
+    } catch (err) {
+      fallbackBroken = true;
+      state.analyzing = false;
+      setBusyUi(false);
+      setStatus(
+        '无法初始化分析引擎', 'Blob Worker 与主线程降级均失败');
+      console.error('Gomoku engine fallback failed:', reason, err);
+    }
+  }
+
+  function onWorkerError(event) {
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    console.error('Gomoku Worker error:', event && event.message ? event.message : event);
+    handleEngineError(state.lastPayload ? state.lastPayload.requestId : state.requestId, new Error('Worker 运行失败'));
+  }
+
+  function handleEngineError(requestId, err) {
+    state.catchup = null;
+    if (requestId !== state.requestId) return;
+    if (!state.degraded && !fallbackBroken) {
+      activateFallback(err);
+      if (state.degraded && state.lastPayload && state.lastPayload.requestId === state.requestId) {
+        runFallback(state.lastPayload);
+        return;
+      }
+    }
+    state.analyzing = false;
+    setBusyUi(false);
+    setStatus(
+      '分析失败，请重新落子或刷新页面', '主线程降级引擎不可用');
+  }
+
+  function runFallback(payload) {
+    if (!fallbackEngine || fallbackBroken) {
+      handleEngineError(payload.requestId, new Error('降级引擎不可用'));
+      return;
+    }
+    const id = payload.requestId;
+    requestAnimationFrame(function () {
+      window.setTimeout(function () {
+        if (state.requestId !== id) return;
+        try {
+          fallbackEngine.analyzeMessage(payload, handleEngineMessage);
+        } catch (err) {
+          if (err && err.name === 'SearchAbort') return;
+          handleEngineError(id, err);
+        }
+      }, 0);
+    });
+  }
+
+  function sendAnalyze(payload, isCatchup) {
+    if (!isCatchup) state.lastPayload = payload;
+    if (isCatchup) {
+      if (state.degraded) {
+        finishCatchup();
+        return;
+      }
+      if (!worker && !ensureWorker()) {
+        finishCatchup();
+        return;
+      }
+      try {
+        worker.postMessage(payload);
+      } catch (err) {
+        activateFallback(err);
+        finishCatchup();
+      }
+      return;
+    }
+    if (state.degraded) {
+      if (fallbackEngine) runFallback(payload);
+      else handleEngineError(payload.requestId, new Error('降级引擎不可用'));
+      return;
+    }
+    if (!worker && !ensureWorker()) {
+      if (fallbackEngine) runFallback(payload);
+      else handleEngineError(payload.requestId, new Error('分析引擎未初始化'));
+      return;
+    }
+    try {
+      worker.postMessage(payload);
+    } catch (err) {
+      activateFallback(err);
+      runFallback(payload);
+    }
+  }
+
+  function finishCatchup() {
+    const current = state.catchup;
+    state.catchup = null;
+    if (!current || !current.pending) return;
+    if (current.pending.requestId !== state.requestId) return;
+    if (state.analyzing) setStatus('AI正在计算…', '分析中…');
+    sendAnalyze(current.pending);
+  }
+
+  function cancelEngine() {
+    clearAutoMove();
+    state.catchup = null;
+    state.interruptContext = null;
+    state.lastPayload = null;
+    if (worker) {
+      try { worker.terminate(); } catch (err) { /* 忽略 */ }
+      worker = null;
+    }
+    if (fallbackEngine) {
+      try { fallbackEngine.cancelSearch(); } catch (err) { /* 忽略 */ }
+    }
+  }
+
+  // ===== 自动对手 / 损失曲线 =====
+  function clearAutoMove() {
+    if (autoMoveTimer) {
+      window.clearTimeout(autoMoveTimer);
+      autoMoveTimer = 0;
+    }
+  }
+
+  function canAutoPlay() {
+    return state.autoOpponent && !state.gameOver && state.turn !== state.humanSide;
+  }
+
+  function scheduleAutoOpponent() {
+    if (!canAutoPlay() || state.analyzing || !state.result) return;
+    const best = state.result.best;
+    if (!best || !isOnBoard(best.x, best.y)) return;
+    if (state.board[idxOf(best.x, best.y)] !== 0) return;
+    clearAutoMove();
+    autoMoveTimer = window.setTimeout(function () {
+      autoMoveTimer = 0;
+      if (!canAutoPlay() || state.analyzing || !state.result) return;
+      const point = state.result.best;
+      if (!point || !isOnBoard(point.x, point.y)) return;
+      if (state.board[idxOf(point.x, point.y)] !== 0) return;
+      placeAt(point.x, point.y, true);
+    }, 240);
+  }
+
+  function maybeAutoOpponent() {
+    if (!state.autoOpponent || state.gameOver) return;
+    if (state.turn === state.humanSide) return;
+    if (state.analyzing) return;
+    if (state.result) scheduleAutoOpponent();
+    else requestAnalysis('auto');
+  }
+
+  function toggleAutoOpponent() {
+    state.autoOpponent = !state.autoOpponent;
+    clearAutoMove();
+    updateControls();
+    updateUnderBoard();
+    drawBoard();
+    if (!state.autoOpponent) {
+      setStatus(
+        '自动对手已关闭', '双方手动');
+      return;
+    }
+    if (state.gameOver) {
+      setStatus('自动对手已开启', '重开后生效');
+      return;
+    }
+    if (state.turn === state.humanSide) {
+      setStatus(
+        '自动对手已开启', '轮到你落子');
+    } else {
+      setStatus(
+        '自动对手已开启', '自动选择落点');
+      maybeAutoOpponent();
+    }
+  }
+
+  function applyHintsVisibility() {
+    el.hintsBtn.classList.toggle('active', state.hintsVisible);
+    el.hintsBtn.setAttribute('aria-pressed', state.hintsVisible ? 'true' : 'false');
+    el.hintsLabel.textContent = '提示：' + (state.hintsVisible ? '开' : '关');
+  }
+
+  function toggleHints() {
+    state.hintsVisible = !state.hintsVisible;
+    applyHintsVisibility();
+    drawBoard();
+  }
+
+  function qualityFromLoss(loss) {
+    if (!Number.isFinite(loss)) return null;
+    const q = Math.round(100 * Math.exp(-loss / 12000));
+    return Math.max(0, Math.min(100, q));
+  }
+
+  function drawScoreChart() {
+    const svg = el.scoreChart;
+    if (!svg) return;
+    const entries = [];
+    let ownCount = 0;
+    state.history.forEach(function (h) {
+      if (h.side !== state.humanSide) return;
+      ownCount += 1;
+      if (Number.isFinite(h.quality)) {
+        entries.push({ label: '第' + ownCount + '手', quality: h.quality });
+      }
+    });
+    if (entries.length < 1) {
+      svg.innerHTML = '';
+      el.scoreChartHint.textContent = '100 = 最佳 · 仅统计你执' + sideName(state.humanSide);
+      return;
+    }
+    const W = 300;
+    const H = 56;
+    const pad = 8;
+    const points = entries.map(function (e, i) {
+      const x = entries.length === 1 ? W / 2 : pad + (i / (entries.length - 1)) * (W - pad * 2);
+      const y = H - pad - (e.quality / 100) * (H - pad * 2);
+      return { x: x, y: y, quality: e.quality, label: e.label };
+    });
+    let worst = points[0];
+    for (let i = 1; i < points.length; i++) {
+      if (points[i].quality < worst.quality) worst = points[i];
+    }
+    let markup = '<line x1="' + pad + '" y1="' + (H - pad) + '" x2="' + (W - pad) + '" y2="' + (H - pad) + '" stroke="rgba(148,174,208,0.18)" stroke-width="1"/>';
+    if (points.length >= 2) {
+      markup += '<polyline points="' + points.map(function (p) {
+        return p.x.toFixed(1) + ',' + p.y.toFixed(1);
+      }).join(' ') + '" fill="none" stroke="#f6c453" stroke-width="1.5" opacity="0.9" stroke-linejoin="round" stroke-linecap="round"/>';
+    }
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i];
+      if (p === worst && worst.quality < 100) {
+        markup += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3.2" fill="#ff5e6c"/>';
+      } else {
+        markup += '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="1.7" fill="#f6c453" opacity="0.85"/>';
+      }
+    }
+    if (worst.quality < 100) {
+      const tx = Math.min(W - 48, Math.max(28, worst.x));
+      const ty = Math.max(10, worst.y - 7);
+      markup += '<text x="' + tx.toFixed(1) + '" y="' + ty.toFixed(1) + '" text-anchor="middle" font-size="7.5" font-weight="700" fill="#ffb3ba">' + worst.label + '</text>';
+    }
+    svg.innerHTML = markup;
+    el.scoreChartHint.textContent = points.length === 1
+      ? worst.label + ' · ' + worst.quality + ' 分'
+      : (worst.quality < 100
+        ? '最低分：' + worst.label + ' · ' + worst.quality + ' 分'
+        : '全部最佳 · 100 分');
+  }
+
+  function handleEngineMessage(msg) {
+    if (!msg || typeof msg.requestId !== 'number') return;
+    if (state.catchup && msg.requestId === state.catchup.requestId) {
+      if (msg.type === 'result' || msg.type === 'error') finishCatchup();
+      else if (msg.type === 'progress' && state.analyzing) {
+        el.statusText.textContent = 'AI正在计算… 补算损失…';
+      }
+      return;
+    }
+    if (msg.requestId !== state.requestId) return;
+
+    if (msg.type === 'progress') {
+      if (state.analyzing) {
+        el.statusText.textContent = 'AI正在计算… 已到深度 ' + msg.depth;
+      }
+      return;
+    }
+
+    if (msg.type === 'error') {
+      handleEngineError(msg.requestId, new Error(msg.message || '引擎错误'));
+      return;
+    }
+
+    if (msg.type !== 'result') return;
+    state.analyzing = false;
+    state.interruptContext = null;
+    state.result = {
+      best: msg.best,
+      top15: Array.isArray(msg.top15) ? msg.top15 : [],
+      lossFromPlayer: msg.lossFromPlayer,
+      meta: msg.meta || { depth: 0, nodes: 0, timeMs: 0, truncated: false }
+    };
+    setBusyUi(false);
+    state.lastPayload = null;
+    renderResult();
+    updateUnderBoard();
+    drawBoard();
+    if (state.autoOpponent && state.turn !== state.humanSide) scheduleAutoOpponent();
+  }
+
+  function renderResult() {
+    const result = state.result;
+    if (!result) return;
+    const best = result.best;
+    let title = '暂无可推荐落点';
+    if (best && isOnBoard(best.x, best.y)) {
+      if (best.tag === 'VCF') {
+        title = '发现必杀点 (' + best.x + ',' + best.y + ') · VCF';
+      } else if (best.tag === 'VCT') {
+        title = '疑似胜势 (' + best.x + ',' + best.y + ') · VCT';
+      } else if (best.score <= -WIN_THRESHOLD) {
+        title = '局面告急：当前行棋方有被连杀风险';
+      } else if (best.isWin) {
+        title = '推荐落点 (' + best.x + ',' + best.y + ')，评分 WIN';
+      } else {
+        title = '推荐落点 (' + best.x + ',' + best.y + ')，评分 ' + formatScore(best.score);
+      }
+    }
+    if (state.degraded) title += ' (降级模式)';
+
+    const lastStone = state.history.length > 0 ? state.history[state.history.length - 1] : null;
+    const lastWasMine = !!(lastStone && lastStone.side === state.humanSide);
+    let lossLine;
+    if (result.lossFromPlayer === null || result.lossFromPlayer === undefined) {
+      if (state.history.length <= 1) {
+        lossLine = '首手无历史';
+      } else if (lastStone && !lastWasMine) {
+        lossLine = sideName(lastStone.side) + '方落子';
+      } else {
+        lossLine = '无新落子';
+      }
+    } else if (lastWasMine) {
+      lossLine = '你刚才这步损失 ' + formatInt(result.lossFromPlayer) + ' 分';
+    } else if (lastStone) {
+      lossLine = sideName(lastStone.side) + '方上一步损失 ' + formatInt(result.lossFromPlayer) + ' 分';
+    } else {
+      lossLine = '上一步损失 ' + formatInt(result.lossFromPlayer) + ' 分';
+    }
+
+    if (result.lossFromPlayer !== null && result.lossFromPlayer !== undefined && lastStone) {
+      lastStone.loss = result.lossFromPlayer;
+      lastStone.quality = qualityFromLoss(result.lossFromPlayer);
+      updateUnderBoard();
+    }
+
+    setStatus(title, lossLine);
+    drawScoreChart();
+  }
+
+  // ===== 对局逻辑 =====
+  function hasFive(x, y, side) {
+    const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+    for (let d = 0; d < dirs.length; d++) {
+      const dx = dirs[d][0];
+      const dy = dirs[d][1];
+      let count = 1;
+      for (let sign = 1; sign >= -1; sign -= 2) {
+        let nx = x + dx * sign;
+        let ny = y + dy * sign;
+        while (isOnBoard(nx, ny) && state.board[idxOf(nx, ny)] === side) {
+          count++;
+          nx += dx * sign;
+          ny += dy * sign;
+        }
+      }
+      if (count >= 5) return true;
+    }
+    return false;
+  }
+
+  function requestAnalysis(reason) {
+    if (state.gameOver) return;
+    const difficulty = DIFFICULTIES[state.difficulty];
+    const wasAnalyzing = state.analyzing;
+    const interruptContext = state.interruptContext;
+    state.interruptContext = null;
+    state.catchup = null;
+    clearAutoMove();
+    state.requestId += 1;
+    state.analyzing = true;
+    state.result = null;
+    state.hoverIdx = -1;
+    const payload = {
+      type: 'analyze',
+      requestId: state.requestId,
+      board: new Int8Array(state.board),
+      side: state.turn,
+      timeBudgetMs: difficulty.timeBudgetMs,
+      nodeBudget: difficulty.nodeBudget
+    };
+    state.lastPayload = payload;
+    setBusyUi(true);
+    let lossHint = '分析中…';
+    if (reason === 'undo' || reason === 'difficulty') lossHint = '重算中…';
+    else if (reason === 'auto') lossHint = '自动落子…';
+    drawBoard();
+    if (wasAnalyzing && !state.degraded) {
+      interruptWorker();
+      if (!state.degraded && interruptContext) {
+        const catchupPayload = {
+          type: 'analyze',
+          requestId: -(++state.catchupSeq),
+          board: new Int8Array(interruptContext.board),
+          side: interruptContext.side,
+          timeBudgetMs: 300,
+          nodeBudget: 80000
+        };
+        state.catchup = { requestId: catchupPayload.requestId, pending: payload };
+        setStatus('AI正在计算…', '补算损失…');
+        sendAnalyze(catchupPayload, true);
+        return;
+      }
+    }
+    setStatus('AI正在计算…', lossHint);
+    sendAnalyze(payload);
+  }
+
+  function placeAt(x, y, isAuto) {
+    if (state.gameOver) return;
+    const idx = idxOf(x, y);
+    if (state.board[idx] !== 0) return;
+    clearAutoMove();
+    const side = state.turn;
+    state.interruptContext = state.analyzing
+      ? { board: new Int8Array(state.board), side: side }
+      : null;
+    state.board[idx] = side;
+    state.history.push({ x: x, y: y, side: side, auto: !!isAuto });
+    state.lastMove = { x: x, y: y };
+    state.turn = otherSide(side);
+
+    if (hasFive(x, y, side)) {
+      state.winner = side;
+      state.gameOver = true;
+      state.requestId += 1;
+      state.analyzing = false;
+      state.result = null;
+      cancelEngine();
+      setBusyUi(false);
+      updateUnderBoard();
+      setStatus(
+        sideName(side) + '方五连 · 获胜（自由规则）', '对局结束，不再计算损失');
+      drawBoard();
+      return;
+    }
+
+    if (state.history.length === SIZE * SIZE) {
+      state.winner = 0;
+      state.gameOver = true;
+      state.requestId += 1;
+      state.analyzing = false;
+      state.result = null;
+      cancelEngine();
+      setBusyUi(false);
+      updateUnderBoard();
+      setStatus('棋盘已满 · 和棋', '对局结束，不再计算损失');
+      drawBoard();
+      return;
+    }
+
+    updateUnderBoard();
+    drawBoard();
+    requestAnalysis();
+  }
+
+  function undo() {
+    if (state.history.length === 0) {
+      setStatus('没有可悔的棋', '先落子再悔棋');
+      return;
+    }
+    state.requestId += 1;
+    cancelEngine();
+    state.analyzing = false;
+    state.result = null;
+    state.gameOver = false;
+    state.winner = 0;
+    const last = state.history.pop();
+    state.board[idxOf(last.x, last.y)] = 0;
+    state.turn = last.side;
+    state.lastMove = state.history.length > 0
+      ? { x: state.history[state.history.length - 1].x, y: state.history[state.history.length - 1].y }
+      : null;
+    state.hoverIdx = -1;
+    if (state.autoOpponent && state.turn !== state.humanSide) {
+      state.autoOpponent = false;
+      updateControls();
+    }
+    setBusyUi(false);
+    updateUnderBoard();
+    drawBoard();
+    drawScoreChart();
+    if (state.history.length > 0) {
+      requestAnalysis('undo');
+    } else {
+      setStatus(
+        '已悔棋', '首手无历史');
+    }
+  }
+
+  function restart() {
+    state.requestId += 1;
+    cancelEngine();
+    state.board.fill(0);
+    state.history = [];
+    state.lastMove = null;
+    state.turn = BLACK;
+    state.winner = 0;
+    state.gameOver = false;
+    state.analyzing = false;
+    state.result = null;
+    state.hoverIdx = -1;
+    setBusyUi(false);
+    updateUnderBoard();
+    drawBoard();
+    drawScoreChart();
+    setStatus(
+      '新对局', '首手无历史');
+    maybeAutoOpponent();
+  }
+
+  function switchSide(side) {
+    if (side === state.humanSide) return;
+    state.humanSide = side;
+    updateControls();
+    state.requestId += 1;
+    cancelEngine();
+    state.board.fill(0);
+    state.history = [];
+    state.lastMove = null;
+    state.turn = BLACK;
+    state.winner = 0;
+    state.gameOver = false;
+    state.analyzing = false;
+    state.result = null;
+    setBusyUi(false);
+    updateUnderBoard();
+    drawBoard();
+    drawScoreChart();
+    setStatus(
+      '已切换执' + sideName(side), '首手无历史');
+    maybeAutoOpponent();
+  }
+
+  function switchDifficulty(diff) {
+    if (!DIFFICULTIES[diff] || diff === state.difficulty) return;
+    state.difficulty = diff;
+    updateControls();
+    if (state.history.length > 0 && !state.gameOver) {
+      state.result = null;
+      requestAnalysis('difficulty');
+    } else {
+      const difficulty = DIFFICULTIES[diff];
+      setStatus(
+        '思考深度：' + difficulty.label, '');
+    }
+  }
+
+  // ===== 事件绑定 =====
+  function bindEvents() {
+    canvas.addEventListener('click', function (event) {
+      const point = pointFromEvent(event);
+      if (!point) return;
+      if (state.gameOver) {
+        el.statusText.textContent = '对局已结束 · 点击「重开」再来一局';
+        return;
+      }
+      placeAt(point.x, point.y);
+    });
+
+    canvas.addEventListener('pointermove', function (event) {
+      const point = pointFromEvent(event);
+      const next = point ? point.idx : -1;
+      if (next !== state.hoverIdx) {
+        state.hoverIdx = next;
+        drawBoard();
+      }
+    });
+
+    canvas.addEventListener('pointerleave', function () {
+      if (state.hoverIdx !== -1) {
+        state.hoverIdx = -1;
+        drawBoard();
+      }
+    });
+
+    el.undoBtn.addEventListener('click', undo);
+    el.restartBtn.addEventListener('click', restart);
+    el.autoOpponentBtn.addEventListener('click', toggleAutoOpponent);
+    el.hintsBtn.addEventListener('click', toggleHints);
+
+    el.sideGroup.addEventListener('click', function (event) {
+      const button = event.target.closest('[data-side]');
+      if (!button) return;
+      switchSide(Number(button.getAttribute('data-side')));
+    });
+
+    el.difficultyGroup.addEventListener('click', function (event) {
+      const button = event.target.closest('[data-diff]');
+      if (!button) return;
+      switchDifficulty(button.getAttribute('data-diff'));
+    });
+
+    window.addEventListener('resize', resizeCanvas);
+    if (typeof ResizeObserver === 'function') {
+      const observer = new ResizeObserver(function () { resizeCanvas(); });
+      observer.observe(canvas.parentElement);
+    }
+  }
+
+  function init() {
+    updateControls();
+    updateUnderBoard();
+    setStatus(
+      '落子后开始分析', '首手无历史');
+    drawScoreChart();
+    bindEvents();
+    initEngine();
+    requestAnimationFrame(function () {
+      resizeCanvas();
+      if (state.degraded) {
+        setStatus(
+          '降级模式', '首手无历史');
+      }
+    });
+  }
+
+  init();
+})();
+
+</script>
+</body>
+</html>
